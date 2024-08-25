@@ -1,0 +1,6 @@
+[batter_percent]
+Description="Battery percent in range 0 -> 1"
+Command=""
+
+[rule-b]
+Name="bbb"
