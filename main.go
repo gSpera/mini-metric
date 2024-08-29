@@ -85,18 +85,32 @@ func main() {
 	for name, rule := range cfg {
 		rule.Name = name
 		log := log.With("rule-name", name)
-		log.Info("Found rule", "shell", rule.Command)
-		cmd := strings.TrimSpace(rule.Command)
-
-		if cmd == "" {
-			log.Warn("Empty shell command", "shell", cmd)
+		log.Info("Found rule", "shell", rule.ShellCommand)
+		typ, ok := rule.detectType()
+		if !ok {
+			log.Error("Cannot deduce rule type")
 			continue
 		}
+		log.Info("Detected type", "type", typ.String())
 
-		h := ShellHandler{
-			Rule: rule,
-			log:  log,
+		var h RuleHandler
+		switch typ {
+		case Shell:
+			h = ShellHandler{
+				Rule: rule,
+				log:  log,
+			}
+		case File:
+			h = FileHandler{
+				Rule: rule,
+				log:  log,
+			}
+		default:
+			panic("Rule handler not implemented")
 		}
+
+		log.Info("Metric type", "metric-type", rule.MetricType)
+
 		err := registry.Register(h.Collector())
 		if err != nil {
 			log.Error("Cannot register rule", "err", err)

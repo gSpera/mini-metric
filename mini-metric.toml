@@ -1,6 +1,11 @@
 [batter_percent]
-Description="Battery percent in range 0 -> 1"
-Command=""
+Description="Battery percent in range 0 -> 100"
+Command="acpi -b | grep -o '[0-9]*%' | grep -o '[0-9]*'"
 
-[rule-b]
-Name="bbb"
+[energy_now]
+Description="Example of reading a file"
+File="/sys/class/power_supply/BAT0/energy_now"
+
+[counter]
+Description="Example for counter"
+MetricType="counter"
