@@ -4,18 +4,13 @@ import (
 	"bytes"
 	"io"
 	"log/slog"
-	"math"
 	"os"
 	"os/exec"
-	"strconv"
-	"strings"
 	"time"
-
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 type RuleHandler interface {
-	Collector() prometheus.Collector
+	Exec() Output
 }
 
 type ShellHandler struct {
@@ -24,7 +19,8 @@ type ShellHandler struct {
 	log *slog.Logger
 }
 
-func (s ShellHandler) Exec() float64 {
+func (s ShellHandler) Exec() Output {
+	s.log.Debug("Executing command", "cmd", s.ShellCommand)
 	cmd := exec.Command("sh", "-c", s.ShellCommand)
 	prStdout, pwStdout := io.Pipe()
 	prStderr, pwStderr := io.Pipe()
@@ -37,6 +33,7 @@ func (s ShellHandler) Exec() float64 {
 
 	go func() {
 		_, err := io.Copy(&stdout, prStdout)
+		s.log.Debug("Done copying stdout", "err", err)
 		if err != nil {
 			s.log.Error("Cannot copy stdout to buffer", "err", err)
 			prStdout.CloseWithError(err)
@@ -44,6 +41,7 @@ func (s ShellHandler) Exec() float64 {
 	}()
 	go func() {
 		_, err := io.Copy(&stderr, prStderr)
+		s.log.Debug("Done copying stderr", "err", err)
 		if err != nil {
 			s.log.Error("Cannot copy stderr to buffer", "err", err)
 			prStderr.CloseWithError(err)
@@ -51,34 +49,35 @@ func (s ShellHandler) Exec() float64 {
 	}()
 
 	cmd.WaitDelay = 10 * time.Second
+	cmd.WaitDelay = 1 * time.Second
+	s.log.Debug("Starting command")
 	err := cmd.Start()
+	s.log.Debug("Done cmd.Start")
 	if err != nil {
 		s.log.Error("Cannot start command", "err", err)
-		return math.NaN()
+		return NaNOutput
 	}
 
+	s.log.Debug("Waiting command")
 	err = cmd.Wait()
+	s.log.Debug("Done cmd.Wait")
 	if err != nil {
 		s.log.Error("Cannot execute command", "err", err, "rawStdout", stdout.String(), "rawStderr", stderr.String())
-		return math.NaN()
+		return NaNOutput
 	}
 
-	// Parse output
-	output := strings.TrimSpace(stdout.String())
-	v, err := strconv.ParseFloat(output, 64)
+	s.log.Debug("Closing stdout and stderr")
+	pwStdout.Close()
+	pwStderr.Close()
+
+	s.log.Debug("Parsing output")
+	out, err := ParseReader(prStdout)
+	s.log.Debug("Done parsing output")
 	if err != nil {
-		s.log.Error("Cannot parse command output as float64", "err", err, "rawStdout", stdout.String(), "rawStderr", stderr.String())
-		return math.NaN()
+		s.log.Error("Cannot parse command output", "err", err, "rawStdout", stdout.String(), "rawStderr", stderr.String())
 	}
 
-	return v
-}
-
-func (s ShellHandler) Collector() prometheus.Collector {
-	return prometheus.NewGaugeFunc(prometheus.GaugeOpts{
-		Name: s.Name,
-		Help: s.Description,
-	}, s.Exec)
+	return out
 }
 
 type FileHandler struct {
@@ -87,26 +86,18 @@ type FileHandler struct {
 	log *slog.Logger
 }
 
-func (f FileHandler) Exec() float64 {
-	content, err := os.ReadFile(f.FilePath)
+func (f FileHandler) Exec() Output {
+	fl, err := os.Open(f.FilePath)
 	if err != nil {
 		f.log.Error("Cannot read file", "file", f.FilePath)
-		return math.NaN()
+		return NaNOutput
 	}
+	defer fl.Close()
 
-	str := strings.TrimSpace(string(content))
-	v, err := strconv.ParseFloat(str, 64)
+	out, err := ParseReader(fl)
 	if err != nil {
-		f.log.Error("Cannot parse file content", "rawContent", string(content))
-		return math.NaN()
+		f.log.Error("Cannot parse file content", "file", f.FilePath, "err", err)
 	}
 
-	return v
-}
-
-func (f FileHandler) Collector() prometheus.Collector {
-	return prometheus.NewGaugeFunc(prometheus.GaugeOpts{
-		Name: f.Name,
-		Help: f.Description,
-	}, f.Exec)
+	return out
 }

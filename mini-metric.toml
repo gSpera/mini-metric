@@ -8,4 +8,6 @@ File="/sys/class/power_supply/BAT0/energy_now"
 
 [counter]
 Description="Example for counter"
-MetricType="counter"
+Labels=["A"]
+#MetricType="counter"
+File="example.output"

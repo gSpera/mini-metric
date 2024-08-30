@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"strings"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type MetricType int
@@ -41,10 +43,21 @@ func (r RuleType) String() string {
 	}
 }
 
+// A Collector extends a prometheus.Collector enableing
+// the user to change the metric values
+type Collector interface {
+	prometheus.Collector
+	With(prometheus.Labels) prometheus.Gauge
+}
+
 type Rule struct {
-	Name        string
+	Name        string `toml:"-"`
 	Description string
 	MetricType  MetricType
+
+	Labels      []string // Deprecated
+	collector Collector
+	handler   RuleHandler
 
 	// Shell
 	ShellCommand string `toml:"Command"`
@@ -76,4 +89,29 @@ func (r *Rule) detectType() (RuleType, bool) {
 	}
 
 	return Shell, false
+}
+
+func (r *Rule) Collector() prometheus.Collector {
+	if r.collector != nil {
+		return r.collector
+	}
+
+	switch r.MetricType {
+	case Gauge:
+		r.collector = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: r.Name,
+			Help: r.Description,
+		}, r.Labels)
+	case Counter:
+		// TODO
+		//r.collector = prometheus.NewCounterVec(prometheus.CounterOpts{
+		//	Name: r.Name,
+		//	Help: r.Description,
+		//}, r.Labels)
+		fallthrough
+	default:
+		panic("Rule collector not implemented")
+	}
+
+	return r.collector
 }

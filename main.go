@@ -68,8 +68,9 @@ func main() {
 	flag.Parse()
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
+		Level: slog.LevelDebug,
 	}))
+	slog.SetDefault(log)
 
 	// Read rules
 	var cfg map[string]Rule
@@ -82,6 +83,7 @@ func main() {
 
 	registry := prometheus.NewRegistry()
 
+	handlers := make([]Rule, 0, len(cfg))
 	for name, rule := range cfg {
 		rule.Name = name
 		log := log.With("rule-name", name)
@@ -93,15 +95,14 @@ func main() {
 		}
 		log.Info("Detected type", "type", typ.String())
 
-		var h RuleHandler
 		switch typ {
 		case Shell:
-			h = ShellHandler{
+			rule.handler = ShellHandler{
 				Rule: rule,
 				log:  log,
 			}
 		case File:
-			h = FileHandler{
+			rule.handler = FileHandler{
 				Rule: rule,
 				log:  log,
 			}
@@ -111,11 +112,12 @@ func main() {
 
 		log.Info("Metric type", "metric-type", rule.MetricType)
 
-		err := registry.Register(h.Collector())
+		err := registry.Register(rule.Collector())
 		if err != nil {
 			log.Error("Cannot register rule", "err", err)
 			continue
 		}
+		handlers = append(handlers, rule)
 	}
 
 	// Prepare metrics
@@ -128,12 +130,26 @@ func main() {
 		Help: "Battery status, 0 -> Unkown, 1 -> Charging, 2 -> Discharging, 3 -> Not Charging (Connected and charged)",
 	}, batteryStatus))
 
-	http.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
+	http.HandleFunc("/metrics", httpMetricHandler(log.With("what", "metric-handler"), handlers, promhttp.HandlerFor(registry, promhttp.HandlerOpts{})))
 
 	log.Info("Listening on", "listen-addr", *listenAddr)
 	err = http.ListenAndServe(*listenAddr, nil)
 	if err != nil {
 		log.Error("Error while listening", "err", err)
 		os.Exit(1)
+	}
+}
+
+func httpMetricHandler(log *slog.Logger, metrics []Rule, httpHandler http.Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		log.Info("Updating metrics")
+		for _, rule := range metrics {
+			out := rule.handler.Exec()
+			for _, line := range out {
+				rule.collector.With(line.Labels).Set(line.Value)
+			}
+		}
+
+		httpHandler.ServeHTTP(w, r)
 	}
 }
