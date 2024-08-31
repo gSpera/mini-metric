@@ -11,3 +11,8 @@ Description="Example for counter"
 Labels=["A"]
 #MetricType="counter"
 File="example.output"
+
+[dropbox]
+Description="Free space on dropbox (units are bytes)"
+Labels=["type"]
+Command="""rclone about --json Dropbox: | jq -r 'to_entries | map(["type=\\""+.key+"\\"", .value]) | .[] | @tsv'"""

@@ -49,7 +49,6 @@ func (s ShellHandler) Exec() Output {
 	}()
 
 	cmd.WaitDelay = 10 * time.Second
-	cmd.WaitDelay = 1 * time.Second
 	s.log.Debug("Starting command")
 	err := cmd.Start()
 	s.log.Debug("Done cmd.Start")
@@ -70,8 +69,10 @@ func (s ShellHandler) Exec() Output {
 	pwStdout.Close()
 	pwStderr.Close()
 
-	s.log.Debug("Parsing output")
-	out, err := ParseReader(prStdout)
+	rawStdout := stdout.String()
+	stdout.WriteString(rawStdout)
+	s.log.Debug("Parsing output", "rawStdout", stdout.String())
+	out, err := ParseReader(&stdout)
 	s.log.Debug("Done parsing output")
 	if err != nil {
 		s.log.Error("Cannot parse command output", "err", err, "rawStdout", stdout.String(), "rawStderr", stderr.String())
