@@ -54,8 +54,8 @@ func ParseReader(r io.Reader) (Output, error) {
 
 		log.Debug("Reading metric value", "line", line, "err", err)
 		vs := strings.Fields(line)
-		if len(vs) != 2 {
-			log.Warn("Expected 2 fields in line", "fields-count", len(vs), "fields", vs)
+		if len(vs) > 2 {
+			log.Warn("Expected 1 or 2 fields in line", "fields-count", len(vs), "fields", vs)
 		}
 
 		// Read the last value after a space
@@ -69,6 +69,10 @@ func ParseReader(r io.Reader) (Output, error) {
 
 		if len(vs) == 1 {
 			log.Debug("Found only metric value, skipping labels")
+			lines = append(lines, OutputLine {
+				Labels: nil,
+				Value: metricValue,
+			})
 			continue
 		}
 
