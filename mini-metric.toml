@@ -1,18 +1,32 @@
-[batter_percent]
-Description="Battery percent in range 0 -> 100"
-Command="acpi -b | grep -o '[0-9]*%' | grep -o '[0-9]*'"
+[init]
+Init=true
+Description="Initialize data"
+Command="""true"""
 
-[energy_now]
-Description="Example of reading a file"
+[battery_percent]
+Description="Battery percent in range 0 -> 100"
+Command="""echo "scale=3; `acpi -b | grep -o '[0-9]*%' | grep -o '[0-9]*'` / 100"| bc"""
+
+[battery_status]
+Description="Battery status, 0 -> Unkown, 1 -> Charging, 2 -> Discharging, 3 -> Not Charging (Connected and charged)"
+Command="/home/gs/bin/mini-metric-helper-battery-status.sh"
+
+[battery_energy_now]
+Description="Energy in the battery at the moment"
 File="/sys/class/power_supply/BAT0/energy_now"
 
-[counter]
-Description="Example for counter"
-Labels=["A"]
-#MetricType="counter"
-File="example.output"
+[battery_power_now]
+Description="Power used from battery at the moment (uW)"
+File="/sys/class/power_supply/BAT0/power_now"
 
-[dropbox]
-Description="Free space on dropbox (units are bytes)"
-Labels=["type"]
-Command="""rclone about --json Dropbox: | jq -r 'to_entries | map(["type=\\""+.key+"\\"", .value]) | .[] | @tsv'"""
+[battery_energy_full]
+Description="Energy in the battery when full"
+File="/sys/class/power_supply/BAT0/energy_full"
+
+[battery_energy_design]
+Description="Energy in the battery when full and new"
+File="/sys/class/power_supply/BAT0/energy_full_design"
+
+[battery_cycle_count]
+Description="Number of battery cycles"
+File="/sys/class/power_supply/BAT0/cycle_count"

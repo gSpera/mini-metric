@@ -30,6 +30,8 @@ type RuleType int
 const (
 	Shell RuleType = iota
 	File
+
+	Init
 )
 
 func (r RuleType) String() string {
@@ -38,6 +40,8 @@ func (r RuleType) String() string {
 		return "Shell"
 	case File:
 		return "File"
+	case Init:
+		return "Init"
 	default:
 		panic("Invalid RuleType")
 	}
@@ -55,7 +59,7 @@ type Rule struct {
 	Description string
 	MetricType  MetricType
 
-	Labels      []string // Deprecated
+	Labels    []string // Deprecated
 	collector Collector
 	handler   RuleHandler
 
@@ -63,6 +67,9 @@ type Rule struct {
 	ShellCommand string `toml:"Command"`
 	// File
 	FilePath string `toml:"File"`
+
+	// Init
+	Init bool `toml:"Init"`
 }
 
 func (r *MetricType) TextUnmarshaler(data []byte) error {
@@ -81,8 +88,11 @@ func (r *MetricType) TextUnmarshaler(data []byte) error {
 }
 
 func (r *Rule) detectType() (RuleType, bool) {
-	if strings.TrimSpace(r.ShellCommand) != "" {
+	if strings.TrimSpace(r.ShellCommand) != "" && !r.Init {
 		return Shell, true
+	}
+	if strings.TrimSpace(r.ShellCommand) != "" && r.Init {
+		return Init, true
 	}
 	if strings.TrimSpace(r.FilePath) != "" {
 		return File, true

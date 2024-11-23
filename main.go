@@ -32,6 +32,7 @@ func main() {
 
 	registry := prometheus.NewRegistry()
 
+	var initRule Rule
 	handlers := make([]Rule, 0, len(cfg))
 	for name, rule := range cfg {
 		rule.Name = name
@@ -55,6 +56,14 @@ func main() {
 				Rule: rule,
 				log:  log,
 			}
+		case Init:
+			initRule = rule
+			initRule.handler = ShellHandler{
+				Rule: rule,
+				log:  log,
+			}
+			log.Info("Found init rule", "name", initRule.Name, "description", initRule.Description)
+			continue // Do not register
 		default:
 			panic("Rule handler not implemented")
 		}
@@ -70,7 +79,7 @@ func main() {
 	}
 
 	// Prepare metrics
-	http.HandleFunc("/metrics", httpMetricHandler(log.With("what", "metric-handler"), handlers, promhttp.HandlerFor(registry, promhttp.HandlerOpts{})))
+	http.HandleFunc("/metrics", httpMetricHandler(log.With("what", "metric-handler"), initRule, handlers, promhttp.HandlerFor(registry, promhttp.HandlerOpts{})))
 
 	log.Info("Listening on", "listen-addr", *listenAddr)
 	err = http.ListenAndServe(*listenAddr, nil)
@@ -80,8 +89,11 @@ func main() {
 	}
 }
 
-func httpMetricHandler(log *slog.Logger, metrics []Rule, httpHandler http.Handler) http.HandlerFunc {
+func httpMetricHandler(log *slog.Logger, initRule Rule, metrics []Rule, httpHandler http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log.Info("Running init rule")
+		initRule.handler.Exec()
+
 		log.Info("Updating metrics")
 		for _, rule := range metrics {
 			out := rule.handler.Exec()
